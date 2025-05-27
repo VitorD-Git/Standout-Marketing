@@ -1,0 +1,209 @@
+\= SPEC-001: Sistema de Gestão de Posts e Aprovação
+\:sectnums:
+\:toc:
+
+\== Background
+
+O sistema visa atender à gestão de conteúdo digital de uma organização que trabalha com publicações periódicas, especialmente posts que passam por processos colaborativos de produção, revisão e aprovação. O processo exige controle rigoroso de versões de conteúdo, histórico de alterações, além de um fluxo formalizado de aprovação com múltiplos aprovadores (CEO, COO, CMO).
+
+O sistema contempla notificações inteligentes (in-app e por e-mail), controle de usuários e permissões baseadas em papéis, e um log de auditoria detalhado que garante rastreabilidade de todas as ações relevantes no ciclo de vida dos posts.
+
+\== Requirements
+
+\=== Must Have
+
+* RF001-RF019: Funcionalidades completas de gestão de posts e cards (criação, edição, histórico de versões, uploads de arte, arquivamento).
+* RF020-RF032: Fluxo de aprovação com múltiplos aprovadores (CEO, COO, CMO), incluindo regras de aprovação automática, rejeição, e ressubmissão.
+* RF033-RF039: Sistema de notificações (in-app com sino, painel de notificações, preferências de e-mail, lembretes de prazos).
+* RF040-RF044: Gerenciamento de usuários, papéis, domínio de autenticação e configurações administrativas.
+* RF045-RF054: Dashboards para redatores e aprovadores, busca global, filtros, visualização em calendário, e log completo de auditoria por post.
+* RNF001-RNF007: Segurança (OAuth, restrição por domínio), manutenibilidade, usabilidade, responsividade, disponibilidade, consistência de dados.
+
+\=== Should Have
+
+* RNF008: Performance otimizada (listas e carregamento ágeis).
+* RNF009: Arquitetura pensada para escalabilidade futura.
+* RF052: Visualização de posts em formato de calendário.
+* RF039: Resumo diário de tarefas pendentes por e-mail.
+
+\=== Could Have (Pós-MVP)
+
+* RF017.2: Restaurar versões anteriores de textos dos cards.
+* Melhorias em UX para mobile e tablets além de responsividade básica.
+
+\=== Won't Have (Por enquanto)
+
+* Armazenamento de versões binárias dos arquivos de arte (além da referência histórica, RF017.3 cobre isso no MVP).
+* Funcionalidades avançadas de analytics e relatórios.
+
+\== Method
+
+\=== Arquitetura Geral
+
+## \[plantuml]
+
+@startuml
+!define RECTANGLE class
+
+cloud "GCP" {
+RECTANGLE "Frontend (React + Next.js)\n(Cloud Run)" as Front
+RECTANGLE "Backend (Node.js API)\n(Cloud Run)" as API
+database "Cloud SQL\n(PostgreSQL)" as DB
+folder "Cloud Storage\n(Artes e Uploads)" as Storage
+RECTANGLE "Firebase Authentication\n(Google OAuth)" as Auth
+}
+
+actor "Usuário (Redator/Aprovador/Admin)" as User
+
+User --> Front : Acessa via navegador
+Front --> API : API REST/GraphQL
+API --> DB : CRUD Posts, Cards, Aprovações
+API --> Storage : Upload/Download Arquivos
+Front --> Auth : Login OAuth (via Firebase Auth)
+API --> Auth : Verifica token JWT
+@enduml
+-------
+
+\=== Modelo de Dados
+
+\[cols="1,3"]
+|===
+|Tabela |Descrição
+
+|users
+|Usuários do sistema. id, name, email, role, created\_at
+
+|posts
+|Post principal. id, title, briefing, publish\_date, release\_id, status, created\_by, created\_at, updated\_at
+
+|cards
+|Cards dentro de um post. id, post\_id, order, created\_at
+
+|card\_versions
+|Versionamento dos cards. id, card\_id, version\_number, text\_main, text\_art, explanation\_for\_designer, asset\_file\_url, asset\_file\_name, created\_by, created\_at, is\_active
+
+|approvals
+|Status de aprovação individual. id, post\_id, user\_id, role, status, comment, created\_at, updated\_at
+
+|releases
+|Agrupamentos de posts. id, name, start\_date, end\_date
+
+|tags
+|Tags/Categorias. id, name
+
+|post\_tags
+|Relação N\:N posts-tags. post\_id, tag\_id
+
+|notifications
+|Notificações in-app. id, user\_id, type, title, message, is\_read, created\_at
+
+|audit\_logs
+|Log de auditoria. id, post\_id, user\_id, action, field\_changed, old\_value, new\_value, timestamp, details
+
+|settings
+|Configurações globais. id, key, value
+|===
+
+\=== Fluxo de Versionamento
+
+## \[plantuml]
+
+@startuml
+actor "Usuário" as User
+
+entity "Card" as Card
+entity "Card Versions" as Versions
+
+User --> Card : Edita Card
+Card --> Versions : Cria nova versão\n(is\_active = true)
+Versions --> Versions : Atualiza is\_active das anteriores para false
+User --> Versions : Visualiza versões anteriores
+
+note right of Versions
+Cada alteração cria uma nova versão
+com data, usuário e snapshot completo
+dos textos e arquivos.
+@enduml
+-------
+
+\=== Fluxo de Aprovação
+
+## \[plantuml]
+
+@startuml
+start
+\:Post criado ou ajustado;
+\:Status geral -> Em Aprovação;
+\:Status individuais -> Pendente;
+
+if (Aprovador rejeita?) then (Sim)
+\:Status geral -> Ajustes Necessários;
+\:Mantém histórico de aprovações;
+stop
+else (Não)
+if (Todos aprovam?) then (Sim)
+\:Status geral -> Aprovado;
+stop
+else (Não)
+if (Data Limite atingida\nAND CMO aprovou) then (Sim)
+\:Status geral -> Aprovado (Override CMO);
+stop
+else (Não)
+\:Aguardando aprovação;
+endif
+endif
+endif
+@enduml
+-------
+
+\=== Fluxo de Notificações
+
+## \[plantuml]
+
+@startuml
+actor "Redator"
+actor "Aprovador"
+
+entity "Sistema de Notificações"
+
+Redator --> "Sistema de Notificações" : Submete Post
+"Aprovador" <-- "Sistema de Notificações" : Recebe pendência
+
+"Aprovador" --> "Sistema de Notificações" : Aprova/Rejeita
+Redator <-- "Sistema de Notificações" : Recebe feedback
+
+"Sistema de Notificações" --> "Aprovador" : Envia lembrete\nse prazo próximo
+@enduml
+-------
+
+\== Implementation
+
+1. Configuração do projeto no GCP (Cloud Run, Cloud SQL, Storage, Firebase Auth)
+2. Desenvolvimento do backend em Node.js (NestJS ou Express)
+3. Desenvolvimento do frontend em React + Next.js
+4. Modelagem e migração do banco de dados (Cloud SQL)
+5. Implementação do versionamento de cards
+6. Implementação do fluxo de aprovação
+7. Implementação do sistema de notificações
+8. Desenvolvimento dos dashboards e filtros
+9. Implementação do log de auditoria
+10. Testes, QA e ajustes
+11. Deploy e monitoramento
+
+\== Milestones
+
+* M1: Setup de infraestrutura GCP e autenticação (1 semana)
+* M2: Backend funcional com gestão de posts e cards (2 semanas)
+* M3: Implementação do fluxo de aprovação (2 semanas)
+* M4: Sistema de notificações e lembretes (1 semana)
+* M5: Dashboards, filtros e busca (2 semanas)
+* M6: Log de auditoria e finalização (1 semana)
+* M7: Testes, deploy e validação (1 semana)
+
+\== Gathering Results
+
+* Validação do atendimento dos requisitos funcionais e não funcionais.
+* Acompanhamento do uso dos fluxos de aprovação.
+* Verificação da aderência do histórico de versões e do log de auditoria.
+* Análise de feedback dos usuários sobre usabilidade e performance.
+* Planejamento para evolução pós-MVP (restauração de versões, melhorias em UX, escalabilidade).
