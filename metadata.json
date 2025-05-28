@@ -1,0 +1,5 @@
+{
+  "name": "Content Approval System",
+  "description": "A web application for managing and approving content posts, facilitating collaboration between editors and approvers with a structured workflow, featuring roles, versioning, and notifications.",
+  "requestFramePermissions": []
+}
