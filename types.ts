@@ -1,14 +1,14 @@
 
 export enum UserRole {
-  EDITOR = 'Editor',
-  APPROVER = 'Approver',
-  ADMIN = 'Admin',
+  WRITER = 'writer',
+  APPROVER = 'approver', 
+  ADMIN = 'admin',
 }
 
-export enum ApproverDesignation {
-  CEO = 'CEO',
-  COO = 'COO',
-  CMO = 'CMO',
+export enum ApproverRole {
+  CEO = 'ceo',
+  COO = 'coo',
+  CMO = 'cmo',
 }
 
 export interface UserNotificationPreferences {
@@ -21,31 +21,38 @@ export interface User {
   name: string;
   email: string;
   role: UserRole;
-  approverDesignation?: ApproverDesignation; // Only if role is Approver
+  approverRole?: ApproverRole; // Only if role is Approver
+  googleId?: string;
+  avatarUrl?: string;
+  createdAt: Date;
+  updatedAt: Date;
   notificationPreferences?: UserNotificationPreferences; // Added for RF039
 }
 
 export enum PostStatus {
-  DRAFT = 'Draft',
-  IN_APPROVAL = 'In Approval',
-  NEEDS_ADJUSTMENTS = 'Needs Adjustments',
-  APPROVED = 'Approved',
-  PUBLISHED = 'Published',
-  ARCHIVED = 'Archived',
+  DRAFT = 'draft',
+  IN_APPROVAL = 'in_approval',
+  NEEDS_ADJUSTMENT = 'needs_adjustment',
+  APPROVED = 'approved',
+  PUBLISHED = 'published',
+  ARCHIVED = 'archived',
 }
 
-export enum ApprovalDecision {
-  PENDING = 'Pending',
-  APPROVED = 'Approved',
-  REJECTED = 'Rejected',
+export enum ApprovalStatus {
+  PENDING = 'pending',
+  APPROVED = 'approved',
+  REJECTED = 'rejected',
 }
 
-export interface IndividualApproval {
-  approverId: string; // User ID of the approver
-  approverDesignation: ApproverDesignation;
-  decision: ApprovalDecision;
+export interface Approval {
+  id: string;
+  approverId: string;
+  approverRole: ApproverRole;
+  status: ApprovalStatus;
   comment?: string;
-  timestamp?: Date;
+  approvedAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface VersionHistory<T> {
@@ -74,14 +81,13 @@ export interface Post {
   id: string;
   title: string;
   titleHistory: VersionHistory<string>[];
-  publicationDate?: Date;
-  generalBriefing: string;
-  generalBriefingHistory: VersionHistory<string>[];
+  publishDate: Date;
+  briefing: string;
   tags: string[]; // Array of Tag IDs
   releaseId?: string; // Release ID
   cards: Card[];
   status: PostStatus;
-  approvals: IndividualApproval[];
+  approvals: Approval[];
   approvalDeadline?: Date;
   auditLog: AuditLogEntry[];
   authorId: string; // User ID of the creator
@@ -95,8 +101,8 @@ export interface Post {
 // Type for data needed to create a new post
 export interface PostCreationData {
   title: string;
-  publicationDate?: Date;
-  generalBriefing: string;
+  publishDate?: Date;
+  briefing: string;
   tagIds: string[];      // Changed from tags to tagIds for clarity
   releaseId?: string;
 }
